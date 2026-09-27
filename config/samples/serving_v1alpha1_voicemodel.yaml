@@ -1,0 +1,26 @@
+apiVersion: serving.voice-d.io/v1alpha1
+kind: VoiceModel
+metadata:
+  labels:
+    app.kubernetes.io/name: voice-d
+    app.kubernetes.io/managed-by: kustomize
+  name: voicemodel-sample
+spec:
+  type: tts
+  source:
+    uri: hf://rhasspy/piper-voices@v1.0.0
+  runtimeRef:
+    name: piper
+  tts:
+    voice: en_US-lessac-medium
+    language: en-US
+    format: wav
+    streaming: false
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
