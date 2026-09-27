@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions: {}
+
+# One in-flight run per ref. PR runs are superseded by new pushes; main runs
+# are allowed to finish so every commit on main has a complete result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Build, verify, lint, test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      # Runs manifests, generate, fmt and vet before compiling, so the verify
+      # step below sees everything the code generators would have rewritten.
+      - name: Build manager binary
+        run: make build
+
+      - name: Verify generated files and go.mod are committed
+        run: |
+          go mod tidy
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Working tree is dirty after 'make build' and 'go mod tidy'."
+            echo "Run 'make manifests generate' and 'go mod tidy', then commit the result."
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+
+      - name: Check linter configuration
+        run: make lint-config
+
+      - name: Run linter
+        run: make lint
+
+      - name: Run unit tests
+        run: make test
+
+  e2e:
+    name: E2E (kind)
+    runs-on: ubuntu-latest
+    # Gate the expensive job: no point provisioning a cluster if the code does
+    # not build, lint or pass unit tests.
+    needs: checks
+    permissions:
+      contents: read
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install the latest version of kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Verify kind installation
+        run: kind version
+
+      - name: Running Test e2e
+        run: make test-e2e
