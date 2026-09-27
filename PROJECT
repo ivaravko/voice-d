@@ -8,4 +8,13 @@ layout:
 - go.kubebuilder.io/v4
 projectName: voice-d
 repo: github.com/ivaravko/voice-d
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: voice-d.io
+  group: serving
+  kind: VoiceModel
+  path: github.com/ivaravko/voice-d/api/v1alpha1
+  version: v1alpha1
 version: "3"

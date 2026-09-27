@@ -1,0 +1,302 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: voicemodels.serving.voice-d.io
+spec:
+  group: serving.voice-d.io
+  names:
+    kind: VoiceModel
+    listKind: VoiceModelList
+    plural: voicemodels
+    singular: voicemodel
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .spec.runtimeRef.name
+      name: Runtime
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: VoiceModel is the Schema for the voicemodels API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of VoiceModel
+            properties:
+              replicas:
+                default: 1
+                description: |-
+                  replicas is the number of serving replicas. 0 scales the model down
+                  without deleting it.
+                format: int32
+                minimum: 0
+                type: integer
+              resources:
+                description: resources is the compute each replica requests.
+                properties:
+                  gpu:
+                    description: |-
+                      gpu requests accelerators. Omit to serve on CPU — which is viable for
+                      small TTS models such as Piper.
+                    properties:
+                      count:
+                        default: 1
+                        description: count is the number of GPUs per replica.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      type:
+                        default: nvidia.com/gpu
+                        description: |-
+                          type is the extended resource name the device plugin advertises,
+                          for example "nvidia.com/gpu" or "amd.com/gpu".
+                        type: string
+                    type: object
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      limits is the CPU/memory/ephemeral-storage cap per replica. GPUs are
+                      requested via gpu rather than here.
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: requests is the CPU/memory/ephemeral-storage requested
+                      per replica.
+                    type: object
+                type: object
+              runtimeRef:
+                description: |-
+                  runtimeRef selects the ServingRuntime that runs this model. The runtime
+                  supplies the engine image and its serving contract, so the same model
+                  can move between engines without changing this spec.
+                properties:
+                  name:
+                    description: name is the name of a ServingRuntime in the same
+                      namespace.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              source:
+                description: source locates the model artifacts to download and serve.
+                properties:
+                  secretRef:
+                    description: |-
+                      secretRef names a Secret in the VoiceModel's namespace holding
+                      credentials for uri — a Hugging Face token, S3 access keys, or an OCI
+                      pull secret, depending on the scheme. Omit for public artifacts.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  uri:
+                    description: |-
+                      uri locates the model artifacts. Supported schemes:
+                        hf://<org>/<repo>[@<revision>]  Hugging Face Hub
+                        s3://<bucket>/<key>             S3-compatible object storage
+                        oci://<registry>/<repo>[:<tag>] OCI artifact
+                    maxLength: 2048
+                    pattern: ^(hf|s3|oci)://.+
+                    type: string
+                required:
+                - uri
+                type: object
+              tts:
+                description: tts holds the synthesis params. Required when type is
+                  "tts".
+                properties:
+                  format:
+                    default: wav
+                    description: format is the audio container the endpoint returns.
+                    enum:
+                    - wav
+                    - opus
+                    - mp3
+                    type: string
+                  language:
+                    description: |-
+                      language is the BCP-47 tag the model synthesizes, for example "en-US".
+                      Multilingual models use it to pick the phonemizer.
+                    pattern: ^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$
+                    type: string
+                  sampleRate:
+                    description: |-
+                      sampleRate is the output sample rate in Hz. Defaults to the model's
+                      native rate when unset; a different value makes the runtime resample.
+                    format: int32
+                    maximum: 192000
+                    minimum: 8000
+                    type: integer
+                  streaming:
+                    default: false
+                    description: |-
+                      streaming serves audio in chunks as it is synthesized instead of
+                      buffering the whole utterance, which cuts time-to-first-audio. The
+                      referenced ServingRuntime must support it.
+                    type: boolean
+                  voice:
+                    description: |-
+                      voice selects the voice (also called speaker) within the model. Models
+                      that ship a single voice ignore it.
+                    maxLength: 253
+                    type: string
+                type: object
+              type:
+                default: tts
+                description: |-
+                  type is the voice task this model serves. Only "tts" is implemented.
+                  Defaulted by the API server, so readers can rely on it being set.
+                enum:
+                - tts
+                type: string
+            required:
+            - runtimeRef
+            - source
+            type: object
+            x-kubernetes-validations:
+            - message: spec.tts is required when spec.type is tts
+              rule: self.type != 'tts' || has(self.tts)
+          status:
+            description: status defines the observed state of VoiceModel
+            properties:
+              conditions:
+                description: |-
+                  conditions represent the current state of the VoiceModel resource.
+                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
+
+                  Condition types reported by voice-d:
+                  - "ModelDownloaded": the artifacts named by spec.source are in the model cache
+                  - "Loaded": the runtime holds the model in memory and can synthesize
+                  - "Ready": at least one replica is serving on status.endpoint
+
+                  The status of each condition is one of True, False, or Unknown.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoint:
+                description: |-
+                  endpoint is the in-cluster URL clients POST synthesis requests to. Set
+                  once the Service backing this model exists.
+                maxLength: 2048
+                type: string
+              observedGeneration:
+                description: |-
+                  observedGeneration is the metadata.generation this status was computed
+                  from.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
